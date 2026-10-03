@@ -76,6 +76,9 @@
               <label><span id="protocol0For1Label">currency0 → currency1</span>（pips）<input id="protocol0For1Input" type="number" value="0" min="0" max="1000" step="1" /></label>
               <label><span id="protocol1For0Label">currency1 → currency0</span>（pips）<input id="protocol1For0Input" type="number" value="0" min="0" max="1000" step="1" /></label>
               <div class="button-row"><button data-action="setProtocolFee" class="primary">设置双向 Protocol Fee</button></div>
+              <hr />
+              <p class="hint">将唯一的 Protocol Fee Controller 指定为 Kiro：<code>0x10f5138286c2e800c76fd94b694c755c92a426de</code>。此操作必须由 PoolManager owner 提交；设置后 Kiro 可管理所有池的 Protocol Fee。</p>
+              <div class="button-row"><button data-action="setProtocolFeeController" class="secondary">指定 Kiro 为 Protocol Fee Controller</button></div>
             </div>
             <div class="mini-form">
               <h3>设置 Claim Fee</h3>
