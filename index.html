@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Ramp Hook 测试费率管理台" />
+    <title>Ramp Fee Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      .pool-picker{display:flex;align-items:end;gap:12px;margin-top:20px}.pool-picker label{flex:1}.pool-summary,.config-snapshot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:18px 0 0;border:1px solid #27435f;border-radius:12px;overflow:hidden}.pool-summary div,.config-snapshot div{padding:12px 14px;border-right:1px solid #27435f;border-bottom:1px solid #27435f}.pool-summary div:nth-child(3n),.config-snapshot div:nth-child(3n){border-right:0}.pool-summary div:nth-last-child(-n+3),.config-snapshot div:nth-last-child(-n+3){border-bottom:0}.pool-summary dt,.config-snapshot dt{font-size:11px;color:#94a9be;margin-bottom:5px}.pool-summary dd,.config-snapshot dd{margin:0;font:12px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;color:#d8e9fb}.state-card{margin:0 0 18px}.wallet-notice{display:block;margin-top:8px;color:#ffd9a0}@media(max-width:620px){.pool-picker{align-items:stretch;flex-direction:column}.pool-summary,.config-snapshot{grid-template-columns:1fr}.pool-summary div,.pool-summary div:nth-child(3n),.config-snapshot div,.config-snapshot div:nth-child(3n){border-right:0}.pool-summary div:nth-last-child(-n+3),.config-snapshot div:nth-last-child(-n+3){border-bottom:1px solid #27435f}.pool-summary div:last-child,.config-snapshot div:last-child{border-bottom:0}}
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">TESTNET / ADMIN CONSOLE</p>
+          <h1>测试池费率管理</h1>
+          <p class="subtle">池费率、RWA 日历与 Keeper 双向覆盖控制台</p>
+        </div>
+        <div class="wallet-area">
+          <span id="networkBadge" class="badge muted">未连接</span>
+          <div id="walletRoot"></div>
+        </div>
+      </header>
+
+      <section class="warning">
+        <strong>测试环境工具。</strong> Keeper 调用仅在当前钱包拥有链上权限时才会成功。请先确认链、Hook、PoolKey 与 Pool ID。
+        <span id="walletAvailability" class="wallet-notice"></span>
+      </section>
+
+      <section class="card connection-card">
+        <div class="section-title"><div><p class="eyebrow">01 / TARGET</p><h2>链与目标池</h2></div><button id="loadButton" class="secondary">刷新链上状态</button></div>
+        <div class="pool-picker">
+          <label>已部署测试池 <select id="poolPreset"></select></label>
+          <button id="switchNetwork" class="secondary">切换到此链</button>
+        </div>
+        <dl id="poolSummary" class="pool-summary"></dl>
+        <!-- 由“已部署测试池”选择器自动填写，不向管理员展示或开放手动编辑。 -->
+        <input id="rpcUrl" type="hidden" /><input id="chainId" type="hidden" /><input id="hook" type="hidden" />
+        <input id="poolId" type="hidden" /><input id="currency0" type="hidden" /><input id="currency1" type="hidden" />
+        <input id="keyFee" type="hidden" /><input id="tickSpacing" type="hidden" /><input id="poolKind" type="hidden" />
+      </section>
+
+      <section class="metrics" aria-live="polite">
+        <article><span>当前 0 → 1</span><strong id="current0For1">—</strong><small>pips / 实际方向费率</small></article>
+        <article><span>当前 1 → 0</span><strong id="current1For0">—</strong><small>pips / 实际方向费率</small></article>
+        <article><span>请求下限 / 上限</span><strong id="feeBand">—</strong><small>pips</small></article>
+        <article><span>覆盖到期</span><strong id="pokeExpiry">—</strong><small id="pokeValues">读取后显示</small></article>
+        <article id="sessionMetric" class="hidden"><span>RWA 当前时段</span><strong id="session">—</strong><small id="sessionDetail">美东日历</small></article>
+      </section>
+
+      <section class="card state-card" aria-live="polite">
+        <div class="section-title"><div><p class="eyebrow">LIVE CONFIG</p><h2>当前链上参数</h2></div><span id="stateUpdated" class="role">选择池后自动读取</span></div>
+        <p id="stateLoading" class="hint">正在等待读取。</p>
+        <dl id="configSnapshot" class="config-snapshot"></dl>
+      </section>
+
+      <section class="form-stack">
+
+        <article class="card">
+          <div class="section-title"><div><p class="eyebrow">费率测试</p><h2>双向费率测试</h2></div></div>
+          <p class="hint">对应文档 2.3、4.2「覆盖、续期与清除」。填写两个交易方向的临时费率和持续时间，通过已连接钱包提交。</p>
+          <p class="hint">填 0 表示该方向沿用基础费率。两边都要恢复时，点击“恢复当前基础费率”。临时费率到期会自动失效，最多持续 72 小时。</p>
+          <div class="grid compact-grid">
+            <label><span id="direction0Label">currency0 → currency1</span>（bp）<input id="fee0For1" type="number" data-bp step="0.01" value="16" min="0" /><small id="fee0For1Pips">16 bp = 1600 pips</small><small>文档参数 fee0For1：currency0 → currency1，提交单位为 pips。</small></label>
+            <label><span id="direction1Label">currency1 → currency0</span>（bp）<input id="fee1For0" type="number" data-bp step="0.01" value="16" min="0" /><small id="fee1For0Pips">16 bp = 1600 pips</small><small>文档参数 fee1For0：currency1 → currency0，提交单位为 pips。</small></label>
+          </div>
+          <label>临时费率持续时间（秒）<input id="ttl" type="number" value="7200" min="1" max="259200" /><small>文档参数 ttl：7200 秒 = 2 小时，为拟用值；当前合约最大 259200 秒 = 72 小时。</small></label>
+          <div class="button-row"><button data-action="poke" class="primary">写入 / 续期 · pokeFee</button><button data-action="clearPoke" class="danger">清除覆盖 / 恢复基础费率 · clearPoke</button></div>
+          <p class="hint"><strong>写入 / 续期：</strong>调用 pokeFee(poolId, fee0For1, fee1For0, ttl)，双向值一起保存，到期时间从本次链上执行时刻重新计算。单边 0 沿用该方向自主费率；双边 0 拒绝。</p>
+          <p class="hint"><strong>清除覆盖：</strong>调用 clearPoke(poolId)。链上成功后，pokeOf 双向值与 expiry 都归零；tBTC 恢复 flat 费率，tQQQ / tCRCL 恢复当前日历时段自主费率。此操作不会修改基础配置。</p>
+          <p class="hint"><strong>自然到期：</strong>覆盖失效后恢复自主费率，但 pokeOf 中旧的双向值和 expiry 可能仍保留。不要把“到期失效”和“主动清除”当成同一状态。</p>
+          <hr />
+          <p class="hint">对应文档 4.3：有效且非零的覆盖实际收费至少为当前自主费率的一半（按 pips 向下取整），并受请求下限与上限限制。普通周一至周四收盘后进入隔夜，周五收盘后进入休市；日历切换不改变存储的覆盖与 expiry。接口读值仅作参考，最终验收以 Swap 事件的 fee 为准。本轮不启用自动调费策略。</p>
+        </article>
+      </section>
+
+
+
+      <section class="card log-card"><div class="section-title"><div><p class="eyebrow">ACTIVITY</p><h2>交易与读取日志</h2></div><button id="clearLog" class="text-button">清除</button></div><ol id="activityLog" class="activity"><li>等待连接与读取。</li></ol></section>
+    </main>
+    <template id="toastTemplate"><div class="toast"></div></template>
+    <script type="module" src="./wallet.jsx"></script>
+  </body>
+</html>
