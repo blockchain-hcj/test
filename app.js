@@ -295,7 +295,7 @@ function renderClaimFeeManagerState({ authority, setClaimFeeRole, setClaimFeeBps
 async function loadState() {
   const selectedPool = value("poolPreset");
   try {
-    const { poolId } = target(); const c = contract(true); const timestamp = BigInt(Math.floor(Date.now()/1000));
+    const { hook, poolId } = target(); const c = contract(true); const timestamp = BigInt(Math.floor(Date.now()/1000));
     const [floor, cap, f0, f1, poke, asym, managerAddress, claimFeeBps, claimRecipient, authority] = await Promise.all([c.pokeFloor(poolId), c.maxFee(poolId), c.currentFee(poolId,true), c.currentFee(poolId,false), c.pokeOf(poolId), c.poolAsymmetry(poolId), c.poolManager(), c.claimFeeBps(poolId), c.claimFeeRecipient(), c.authority()]);
     if (selectedPool !== value("poolPreset")) return;
     const manager = new ethers.Contract(managerAddress, POOL_MANAGER_ABI, new ethers.JsonRpcProvider(value("rpcUrl")));
