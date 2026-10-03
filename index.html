@@ -84,6 +84,19 @@
               <div class="button-row"><button data-action="setClaimFee" class="primary">设置 Claim Fee</button></div>
             </div>
           </div>
+          <hr />
+          <div class="mini-form">
+            <h3>Claim Fee 管理人</h3>
+            <p class="hint">为当前 Hook 单独配置 role 3（<code>CLAIM_FEE_MANAGER</code>）。该角色只能调用 <code>setClaimFee</code> 与 <code>setClaimFeeBps</code>；前者也可修改 Hook 级收款地址。</p>
+            <dl class="config-snapshot">
+              <div><dt>AccessManager</dt><dd id="claimAuthority">读取后显示</dd></div>
+              <div><dt>当前函数角色</dt><dd id="claimManagerRole">读取后显示</dd></div>
+              <div><dt>Victor · 0xD829…726e</dt><dd id="victorClaimRole">读取后显示</dd></div>
+              <div><dt>Kiro · 0x10f5…26de</dt><dd id="kiroClaimRole">读取后显示</dd></div>
+            </dl>
+            <p class="hint">提交时会同时保留当前提交钱包为该角色成员，并授予 Victor、Kiro 即时权限。Crypto 与 RWA 是不同 Hook，需要在各自任一池页面各提交一次。</p>
+            <div class="button-row"><button data-action="configureClaimFeeManagers" class="primary">配置当前 Hook 的 Claim Fee 管理人</button></div>
+          </div>
         </article>
 
         <article id="calendarAdminSection" class="card hidden">
