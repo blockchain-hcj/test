@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 // Wallet signatures authorize direct Hook calls.
 const ABI = [
-  "error Error(string)", "error Panic(uint256)", "error OwnableUnauthorizedAccount(address account)",
+  "error Error(string)", "error Panic(uint256)",
   "error AccessManagedUnauthorized(address caller)", "error AccessManagedRequiredDelay(address caller,uint32 delay)",
   "error AccessManagedInvalidAuthority(address authority)",
   "error NotDynamicFeePool()", "error PoolNotConfigured()", "error InvalidConfig()", "error InvalidTtl()", "error FeeBelowFloor()", "error FeeAboveCap()", "error InvalidMaxFee()", "error EmptyPoke()", "error PremiumExceedsFeeBand()", "error NativeNotSupported()",
@@ -26,7 +26,6 @@ const ABI = [
 const POOL_MANAGER_ABI = [
   "function extsload(bytes32) view returns (bytes32)",
   "function protocolFeeController() view returns (address)",
-  "function setProtocolFeeController(address controller)",
   "function setProtocolFee((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks),uint24)",
 ];
 const ACCESS_MANAGER_ABI = [
@@ -43,7 +42,6 @@ const CLAIM_FEE_MANAGERS = [
   "0xD8290FB8D042EF983C5a43f6dB171B30bA46726e",
   "0x10f5138286c2e800c76fd94b694c755c92a426de",
 ];
-const KIRO_PROTOCOL_FEE_CONTROLLER = "0x10f5138286c2e800c76fd94b694c755c92a426de";
 const CLAIM_FEE_SELECTORS = [
   ethers.id("setClaimFee((address,address,uint24,int24,address),address[],uint16,address)").slice(0, 10),
   ethers.id("setClaimFeeBps((address,address,uint24,int24,address),uint16)").slice(0, 10),
@@ -128,7 +126,6 @@ const ERROR_HINTS = {
   InvalidRecipient: "收款地址不能是零地址、Hook 或 PoolManager。",
   ProtocolFeeTooLarge: "protocol fee 每个方向不能高于 1000 pips（0.1%）。",
   InvalidCaller: "当前钱包不是 PoolManager 的 protocolFeeController。",
-  OwnableUnauthorizedAccount: "当前钱包不是 PoolManager owner，无法修改 protocolFeeController。",
   AccessManagerUnauthorizedAccount: "当前钱包不是 AccessManager 管理员，或没有执行该权限变更的角色。",
 };
 function errorDataCandidates(error) {
@@ -355,12 +352,6 @@ async function send(action, button) {
       const manager = new ethers.Contract(managerAddress, POOL_MANAGER_ABI, signer);
       if (!confirm(`确认设置 protocol fee：0→1 ${zeroForOne} pips，1→0 ${oneForZero} pips？该费用由 PoolManager 先从交易输入中扣除。`)) return;
       tx = await manager.setProtocolFee(poolKey(), packed);
-    }
-    if (action === "setProtocolFeeController") {
-      const managerAddress = await c.poolManager();
-      const manager = new ethers.Contract(managerAddress, POOL_MANAGER_ABI, signer);
-      if (!confirm(`确认将 PoolManager 的唯一 protocolFeeController 设置为 Kiro？\n\n${KIRO_PROTOCOL_FEE_CONTROLLER}\n\n之后只有该钱包可设置各池的 protocol fee；这不是 AccessManager 角色。`)) return;
-      tx = await manager.setProtocolFeeController(KIRO_PROTOCOL_FEE_CONTROLLER);
     }
     if (action === "configureClaimFeeManagers") {
       const authority = await c.authority();
