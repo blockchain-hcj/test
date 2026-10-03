@@ -17,7 +17,6 @@ const ABI = [
   "function openSec(bytes32) view returns (uint32)", "function closeSec(bytes32) view returns (uint32)", "function dstMode(bytes32) view returns (uint8)",
   "function dayOverride(bytes32,uint256,uint256,uint256) view returns (uint8)",
   "function earlyClose(bytes32,uint256,uint256,uint256) view returns (uint32)",
-  "function authority() view returns (address)",
   "function poolManager() view returns (address)", "function claimFeeBps(bytes32) view returns (uint16)", "function claimFeeRecipient() view returns (address)",
   "function pokeFee(bytes32,uint24,uint24,uint40)", "function clearPoke(bytes32)",
   "function setDayOverrides(bytes32,uint256,uint64)", "function setEarlyClose(bytes32,uint256,uint256,uint256,uint32)",
@@ -27,24 +26,6 @@ const POOL_MANAGER_ABI = [
   "function extsload(bytes32) view returns (bytes32)",
   "function protocolFeeController() view returns (address)",
   "function setProtocolFee((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks),uint24)",
-];
-const ACCESS_MANAGER_ABI = [
-  "error AccessManagerUnauthorizedAccount(address msgsender,uint64 roleId)",
-  "function hasRole(uint64,address) view returns (bool isMember,uint32 executionDelay)",
-  "function getTargetFunctionRole(address,bytes4) view returns (uint64)",
-  "function labelRole(uint64,string)",
-  "function grantRole(uint64,address,uint32)",
-  "function setTargetFunctionRole(address,bytes4[],uint64)",
-  "function multicall(bytes[] data) returns (bytes[] results)",
-];
-const CLAIM_FEE_MANAGER_ROLE = 3n;
-const CLAIM_FEE_MANAGERS = [
-  "0xD8290FB8D042EF983C5a43f6dB171B30bA46726e",
-  "0x10f5138286c2e800c76fd94b694c755c92a426de",
-];
-const CLAIM_FEE_SELECTORS = [
-  ethers.id("setClaimFee((address,address,uint24,int24,address),address[],uint16,address)").slice(0, 10),
-  ethers.id("setClaimFeeBps((address,address,uint24,int24,address),uint16)").slice(0, 10),
 ];
 
 // 仅收录仓库已记录的 Arc 部署池；新增池须先在此白名单中审核登记。
@@ -126,7 +107,6 @@ const ERROR_HINTS = {
   InvalidRecipient: "收款地址不能是零地址、Hook 或 PoolManager。",
   ProtocolFeeTooLarge: "protocol fee 每个方向不能高于 1000 pips（0.1%）。",
   InvalidCaller: "当前钱包不是 PoolManager 的 protocolFeeController。",
-  AccessManagerUnauthorizedAccount: "当前钱包不是 AccessManager 管理员，或没有执行该权限变更的角色。",
 };
 function errorDataCandidates(error) {
   const values = [], seen = new Set();
@@ -205,8 +185,6 @@ function updateDirections() {
   const c0 = pool?.currency0Symbol || "currency0", c1 = pool?.currency1Symbol || "currency1";
   $("direction0Label").textContent = `${c0} → ${c1}`;
   $("direction1Label").textContent = `${c1} → ${c0}`;
-  $("protocol0For1Label").textContent = `${c0} → ${c1}`;
-  $("protocol1For0Label").textContent = `${c1} → ${c0}`;
 }
 
 const DAY_OVERRIDE_LABELS = ["默认日历（NONE）", "全天关闭（FORCE_CLOSED）", "全天开放（FORCE_OPEN）"];
@@ -268,43 +246,19 @@ function renderProtocolAndClaimState({ manager, controller, protocolFee, claimFe
   $("claimFeeCurrent").textContent = `${claimFeeBps.toString()} bps · ${(Number(claimFeeBps) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
   $("claimFeeRecipient").textContent = claimRecipient === ethers.ZeroAddress ? "未初始化" : short(claimRecipient);
 
-  // Keep editable values aligned with the state just read. This prevents a
-  // follow-up submission from unintentionally resetting a configured fee.
-  $("protocol0For1Input").value = directions.zeroForOne.toString();
-  $("protocol1For0Input").value = directions.oneForZero.toString();
   $("claimFeeBps").value = claimFeeBps.toString();
-}
-function renderClaimFeeManagerState({ authority, setClaimFeeRole, setClaimFeeBpsRole, memberships }) {
-  $("claimAuthority").textContent = short(authority);
-  $("claimAuthority").title = authority;
-  const roleLabel = setClaimFeeRole === CLAIM_FEE_MANAGER_ROLE && setClaimFeeBpsRole === CLAIM_FEE_MANAGER_ROLE
-    ? "role 3 · CLAIM_FEE_MANAGER"
-    : `setClaimFee: role ${setClaimFeeRole} · setClaimFeeBps: role ${setClaimFeeBpsRole}`;
-  $("claimManagerRole").textContent = roleLabel;
-  CLAIM_FEE_MANAGERS.forEach((wallet, index) => {
-    const member = memberships[index];
-    $(index === 0 ? "victorClaimRole" : "kiroClaimRole").textContent = member.isMember
-      ? `已授权${member.executionDelay ? ` · 延迟 ${member.executionDelay}s` : " · 即时"}`
-      : "未授权";
-  });
 }
 
 async function loadState() {
   const selectedPool = value("poolPreset");
   try {
-    const { hook, poolId } = target(); const c = contract(true); const timestamp = BigInt(Math.floor(Date.now()/1000));
-    const [floor, cap, f0, f1, poke, asym, managerAddress, claimFeeBps, claimRecipient, authority] = await Promise.all([c.pokeFloor(poolId), c.maxFee(poolId), c.currentFee(poolId,true), c.currentFee(poolId,false), c.pokeOf(poolId), c.poolAsymmetry(poolId), c.poolManager(), c.claimFeeBps(poolId), c.claimFeeRecipient(), c.authority()]);
+    const { poolId } = target(); const c = contract(true); const timestamp = BigInt(Math.floor(Date.now()/1000));
+    const [floor, cap, f0, f1, poke, asym, managerAddress, claimFeeBps, claimRecipient] = await Promise.all([c.pokeFloor(poolId), c.maxFee(poolId), c.currentFee(poolId,true), c.currentFee(poolId,false), c.pokeOf(poolId), c.poolAsymmetry(poolId), c.poolManager(), c.claimFeeBps(poolId), c.claimFeeRecipient()]);
     if (selectedPool !== value("poolPreset")) return;
     const manager = new ethers.Contract(managerAddress, POOL_MANAGER_ABI, new ethers.JsonRpcProvider(value("rpcUrl")));
-    const access = new ethers.Contract(authority, ACCESS_MANAGER_ABI, new ethers.JsonRpcProvider(value("rpcUrl")));
-    const [protocolFee, protocolController, setClaimFeeRole, setClaimFeeBpsRole, ...memberships] = await Promise.all([
-      protocolFeeAt(manager, poolId), manager.protocolFeeController(),
-      access.getTargetFunctionRole(hook, CLAIM_FEE_SELECTORS[0]), access.getTargetFunctionRole(hook, CLAIM_FEE_SELECTORS[1]),
-      ...CLAIM_FEE_MANAGERS.map((wallet) => access.hasRole(CLAIM_FEE_MANAGER_ROLE, wallet)),
-    ]);
+    const [protocolFee, protocolController] = await Promise.all([protocolFeeAt(manager, poolId), manager.protocolFeeController()]);
     if (selectedPool !== value("poolPreset")) return;
     renderProtocolAndClaimState({ manager: managerAddress, controller: protocolController, protocolFee, claimFeeBps, claimRecipient });
-    renderClaimFeeManagerState({ authority, setClaimFeeRole, setClaimFeeBpsRole, memberships });
     $("current0For1").textContent = fmtPips(f0); $("current1For0").textContent = fmtPips(f1); $("feeBand").textContent = `${floor} / ${cap}`;
     $("pokeExpiry").textContent = toUnixLabel(poke.expiry); $("pokeValues").textContent = `0→1 ${poke.fee0For1} · 1→0 ${poke.fee1For0}`;
     const shared = [["允许设置的最低费率", fmtPips(floor)], ["最高费率", fmtPips(cap)], ["单方向额外加价", `${fmtPips(asym.premiumPips)} · ${asym.premiumZeroForOne ? $("direction0Label").textContent : $("direction1Label").textContent}`], [$("direction0Label").textContent, fmtPips(f0)], [$("direction1Label").textContent, fmtPips(f1)], ["临时费率（保存值）", `${fmtPips(poke.fee0For1)} / ${fmtPips(poke.fee1For0)}`], ["临时费率到期（北京时间）", toUnixLabel(poke.expiry)]];
@@ -342,30 +296,6 @@ async function send(action, button) {
       if (bps > 2000n) throw new Error("claim fee 不能高于 2000 bps（20%）。");
       if (!confirm(`确认将该池 claim fee 分账设置为 ${bps} bps？这会影响之后同步的 LP 手续费分账。`)) return;
       tx = await c.setClaimFeeBps(poolKey(), bps);
-    }
-    if (action === "setProtocolFee") {
-      const zeroForOne = numberValue("protocol0For1Input"), oneForZero = numberValue("protocol1For0Input");
-      if (zeroForOne > 1000n || oneForZero > 1000n) throw new Error("protocol fee 每个方向不能高于 1000 pips（0.1%）。");
-      const packed = zeroForOne | (oneForZero << 12n);
-      const readOnly = contract();
-      const managerAddress = await readOnly.poolManager();
-      const manager = new ethers.Contract(managerAddress, POOL_MANAGER_ABI, signer);
-      if (!confirm(`确认设置 protocol fee：0→1 ${zeroForOne} pips，1→0 ${oneForZero} pips？该费用由 PoolManager 先从交易输入中扣除。`)) return;
-      tx = await manager.setProtocolFee(poolKey(), packed);
-    }
-    if (action === "configureClaimFeeManagers") {
-      const authority = await c.authority();
-      const access = new ethers.Contract(authority, ACCESS_MANAGER_ABI, signer);
-      const sender = await signer.getAddress();
-      const roleCalls = [
-        access.interface.encodeFunctionData("labelRole", [CLAIM_FEE_MANAGER_ROLE, "CLAIM_FEE_MANAGER"]),
-        access.interface.encodeFunctionData("setTargetFunctionRole", [hook, CLAIM_FEE_SELECTORS, CLAIM_FEE_MANAGER_ROLE]),
-        ...[...new Set([sender, ...CLAIM_FEE_MANAGERS].map((wallet) => wallet.toLowerCase()))].map((wallet) =>
-          access.interface.encodeFunctionData("grantRole", [CLAIM_FEE_MANAGER_ROLE, wallet, 0]),
-        ),
-      ];
-      if (!confirm(`确认配置当前 Hook 的 Claim Fee 管理角色？\n\nrole 3 可调用 setClaimFee（含收款人变更）与 setClaimFeeBps。\n将授权：\n${[sender, ...CLAIM_FEE_MANAGERS].map(short).join("\n")}\n\nCrypto 与 RWA 是两个 Hook；请分别在对应池页面执行一次。`)) return;
-      tx = await access.multicall(roleCalls);
     }
     if (["forceClosed", "forceOpen", "restoreDefault"].includes(action)) {
       const readOnly = contract();
