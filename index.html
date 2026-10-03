@@ -58,6 +58,34 @@
 
       <section class="form-stack">
 
+        <article class="card">
+          <div class="section-title"><div><p class="eyebrow">协议收入设置</p><h2>Protocol Fee 与 Claim Fee</h2></div></div>
+          <p class="hint">Protocol fee 由 PoolManager 从 swap 输入中扣除；claim fee 是 Hook 从 LP 已赚手续费中分账。两者独立生效，不能相互替代。</p>
+          <dl class="config-snapshot">
+            <div><dt>PoolManager</dt><dd id="protocolManager">读取后显示</dd></div>
+            <div><dt>Protocol Fee Controller</dt><dd id="protocolController">读取后显示</dd></div>
+            <div><dt>当前 protocol fee · 0 → 1</dt><dd id="protocol0For1">读取后显示</dd></div>
+            <div><dt>当前 protocol fee · 1 → 0</dt><dd id="protocol1For0">读取后显示</dd></div>
+            <div><dt>当前 claim fee</dt><dd id="claimFeeCurrent">读取后显示</dd></div>
+            <div><dt>claim fee 收款人</dt><dd id="claimFeeRecipient">读取后显示</dd></div>
+          </dl>
+          <div class="grid compact-grid">
+            <div class="mini-form">
+              <h3>设置 Protocol Fee</h3>
+              <p class="hint">单位为 pips；每个方向最高 1000 pips（0.1%）。仅 PoolManager 的 protocolFeeController 可提交。</p>
+              <label><span id="protocol0For1Label">currency0 → currency1</span>（pips）<input id="protocol0For1Input" type="number" value="0" min="0" max="1000" step="1" /></label>
+              <label><span id="protocol1For0Label">currency1 → currency0</span>（pips）<input id="protocol1For0Input" type="number" value="0" min="0" max="1000" step="1" /></label>
+              <div class="button-row"><button data-action="setProtocolFee" class="primary">设置双向 Protocol Fee</button></div>
+            </div>
+            <div class="mini-form">
+              <h3>设置 Claim Fee</h3>
+              <p class="hint">单位为 bps；最高 2000 bps（20%）。收款地址为 Hook 级设置，本操作不修改收款人。</p>
+              <label>该池 claim fee（bps）<input id="claimFeeBps" type="number" value="0" min="0" max="2000" step="1" /></label>
+              <div class="button-row"><button data-action="setClaimFee" class="primary">设置 Claim Fee</button></div>
+            </div>
+          </div>
+        </article>
+
         <article id="calendarAdminSection" class="card hidden">
           <div class="section-title"><div><p class="eyebrow">RWA 日历测试</p><h2>当天日历调整</h2></div></div>
           <p class="hint">只对当前合约口径的美东日期执行操作。该区域需要日历配置权限；前端会在提交前读取并保留同月其他特殊交易日状态。</p>
