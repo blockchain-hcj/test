@@ -58,6 +58,25 @@
 
       <section class="form-stack">
 
+        <article id="rwaConfigCard" class="card hidden">
+          <div class="section-title"><div><p class="eyebrow">RWA / ADMIN</p><h2>日历费率曲线</h2></div></div>
+          <p class="hint">只对 RWA 池显示。读取时会以链上值填充；提交会调用 <code>RwaRamp.setPoolConfig</code>，同时覆盖九个曲线参数与该池费率上限。pips 为百万分之一：2,200 pips = 0.22%。</p>
+          <div class="grid compact-grid">
+            <label>日盘底费率 · openFloor（pips）<input id="openFloor" type="number" min="100" step="1" /><small>开盘衰减结束后的费率。</small></label>
+            <label>隔夜底费率 · overnightFloor（pips）<input id="overnightFloor" type="number" min="100" step="1" /><small>普通交易日的盘前/盘后费率。</small></label>
+            <label>闭市底费率 · closedFloor（pips）<input id="closedFloor" type="number" min="100" step="1" /><small>周末与完整假日的费率。</small></label>
+            <label>普通日开盘倍数 · spikeMult<input id="spikeMult" type="number" min="0" max="20" step="1" /><small>开盘峰值 = overnightFloor × spikeMult。</small></label>
+            <label>闭市后开盘峰值 · closedSpike（pips）<input id="closedSpike" type="number" min="0" step="1" /><small>周一或完整休市日后的开盘峰值。</small></label>
+            <label>开盘回落时长 · descentWindow（秒）<input id="descentWindow" type="number" min="0" max="21600" step="1" /><small>峰值线性回落至 openFloor 的时长。</small></label>
+            <label>收盘保护费率 · closeFloor（pips）<input id="closeFloor" type="number" min="0" step="1" /><small>收盘附近的目标费率；0 表示关闭该曲线。</small></label>
+            <label>收盘前窗口 · closeBefore（秒）<input id="closeBefore" type="number" min="0" max="21600" step="1" /><small>在收盘前线性爬升的时长。</small></label>
+            <label>收盘后保持 · closeAfter（秒）<input id="closeAfter" type="number" min="0" max="21600" step="1" /><small>收盘后继续保持 closeFloor 的时长。</small></label>
+            <label>该池费率上限 · maxFee（pips）<input id="rwaMaxFee" type="number" min="100" step="1" /><small>所有自主费率和临时覆盖都不能超过它。</small></label>
+          </div>
+          <div class="button-row"><button data-action="setRwaConfig" class="primary">更新日历费率曲线 · setPoolConfig</button></div>
+          <p class="hint"><strong>Fables CRCL 参考值：</strong>2200 / 1500 / 800 / 5 / 10000 / 1800 / 2600 / 1800 / 1800 / 50000。</p>
+        </article>
+
         <article class="card">
           <div class="section-title"><div><p class="eyebrow">协议收入设置</p><h2>Protocol Fee 与 Claim Fee</h2></div></div>
           <p class="hint">Protocol fee 由 PoolManager 从 swap 输入中扣除；claim fee 是 Hook 从 LP 已赚手续费中分账。两者独立生效，不能相互替代。</p>

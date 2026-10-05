@@ -13,6 +13,7 @@ const ABI = [
   "function pokeOf(bytes32) view returns (uint24 fee0For1,uint24 fee1For0,uint40 expiry)",
   "function poolAsymmetry(bytes32) view returns (uint24 premiumPips,bool premiumZeroForOne)",
   "function floorConfig(bytes32) view returns (uint24 openFloor,uint24 overnightFloor,uint24 closedFloor,uint8 spikeMult,uint24 closedSpike,uint32 descentWindow,uint24 closeFloor,uint32 closeBefore,uint32 closeAfter)",
+  "function setPoolConfig((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks),(uint24 openFloor,uint24 overnightFloor,uint24 closedFloor,uint8 spikeMult,uint24 closedSpike,uint32 descentWindow,uint24 closeFloor,uint32 closeBefore,uint32 closeAfter),uint24 cap)",
   "function sessionAt(bytes32,uint256) view returns (uint8)",
   "function openSec(bytes32) view returns (uint32)", "function closeSec(bytes32) view returns (uint32)", "function dstMode(bytes32) view returns (uint8)",
   "function dayOverride(bytes32,uint256,uint256,uint256) view returns (uint8)",
@@ -59,6 +60,7 @@ const POOLS = [
 const $ = (id) => document.getElementById(id);
 const value = (id) => $(id).value.trim();
 const numberValue = (id) => { if ($(id).hasAttribute("data-bp")) { const raw = value(id); if (!/^\d+(\.\d{1,2})?$/.test(raw)) throw new Error("费率必须为非负数，最多两位小数（bp）"); const [whole, fraction = ""] = raw.split("."); return BigInt(whole) * 100n + BigInt(fraction.padEnd(2,"0")); } const raw = value(id); if (raw === "") throw new Error(`请填写 ${id}`); if (!/^\d+$/.test(raw)) throw new Error(`${id} 必须为非负整数`); return BigInt(raw); };
+const integerValue = (id) => { const raw = value(id); if (!/^\d+$/.test(raw)) throw new Error(`${id} 必须为非负整数`); return BigInt(raw); };
 let walletAdapter;
 export function setWalletAdapter(adapter) { walletAdapter = adapter; }
 
@@ -147,6 +149,7 @@ function showKind() {
   const rwa = poolKind() === "rwa";
   $("sessionMetric").classList.toggle("hidden", !rwa);
   $("calendarAdminSection").classList.toggle("hidden", !rwa);
+  $("rwaConfigCard").classList.toggle("hidden", !rwa);
 }
 function renderPoolSummary(pool) {
   const fields = [["网络", `Arc · Chain ${pool.chainId}`], ["类型", pool.kind === "rwa" ? "RWA / Calendar" : "Crypto / Flat"], ["记录来源", pool.source], ["Pool ID", pool.poolId], ["Hook", pool.hook], ["PoolKey", `${pool.currency0Symbol} / ${pool.currency1Symbol} · fee ${pool.fee} · tick ${pool.tickSpacing}`]];
@@ -155,6 +158,11 @@ function renderPoolSummary(pool) {
 function renderConfigSnapshot(fields, loadingMessage = "") {
   $("configSnapshot").innerHTML = fields.map(([k,v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("");
   $("stateLoading").textContent = loadingMessage;
+}
+function setRwaConfigInputs(fc, cap) {
+  const fields = ["openFloor", "overnightFloor", "closedFloor", "spikeMult", "closedSpike", "descentWindow", "closeFloor", "closeBefore", "closeAfter"];
+  fields.forEach((field) => { $(field).value = fc[field].toString(); });
+  $("rwaMaxFee").value = cap.toString();
 }
 function selectPool() {
   const pool = POOLS.find((entry) => entry.id === value("poolPreset"));
@@ -269,6 +277,7 @@ async function loadState() {
     if (poolKind() === "rwa") {
       const [fc, session, open, close, dst] = await Promise.all([c.floorConfig(poolId), c.sessionAt(poolId,timestamp), c.openSec(poolId), c.closeSec(poolId), c.dstMode(poolId)]);
       if (selectedPool !== value("poolPreset")) return;
+      setRwaConfigInputs(fc, cap);
       const calendarState = await readCurrentCalendarState(c, poolId, timestamp, dst);
       if (selectedPool !== value("poolPreset")) return;
       $("session").textContent = ["OPEN","OVERNIGHT","CLOSED"][Number(session)] || `UNKNOWN (${session})`; $("sessionDetail").textContent = calendarReference(open,close,dst);
@@ -296,6 +305,22 @@ async function send(action, button) {
       if (bps > 2000n) throw new Error("claim fee 不能高于 2000 bps（20%）。");
       if (!confirm(`确认将该池 claim fee 分账设置为 ${bps} bps？这会影响之后同步的 LP 手续费分账。`)) return;
       tx = await c.setClaimFeeBps(poolKey(), bps);
+    }
+    if (action === "setRwaConfig") {
+      if (poolKind() !== "rwa") throw new Error("仅 RWA 池支持日历费率配置");
+      const cfg = {
+        openFloor: integerValue("openFloor"), overnightFloor: integerValue("overnightFloor"), closedFloor: integerValue("closedFloor"),
+        spikeMult: integerValue("spikeMult"), closedSpike: integerValue("closedSpike"), descentWindow: integerValue("descentWindow"),
+        closeFloor: integerValue("closeFloor"), closeBefore: integerValue("closeBefore"), closeAfter: integerValue("closeAfter"),
+      };
+      const cap = integerValue("rwaMaxFee");
+      if (cfg.openFloor < 100n || cfg.overnightFloor < 100n || cfg.closedFloor < 100n || cap < 100n) throw new Error("open / overnight / closed 与 cap 至少为 100 pips");
+      if (cfg.openFloor > cap || cfg.overnightFloor > cap || cfg.closedFloor > cap || cfg.closeFloor > cap) throw new Error("基础费率与 closeFloor 不能超过 maxFee");
+      if (cfg.spikeMult > 20n || cfg.descentWindow > 21600n || cfg.closeBefore > 21600n || cfg.closeAfter > 21600n) throw new Error("spikeMult 最大 20；各窗口最大 21,600 秒（6 小时）");
+      if (cfg.descentWindow === 0n ? (cfg.spikeMult !== 0n || cfg.closedSpike !== 0n) : (cfg.overnightFloor * cfg.spikeMult <= cfg.openFloor || cfg.closedSpike <= cfg.openFloor)) throw new Error("开盘曲线要求：有 descentWindow 时，两个峰值均须高于 openFloor；无窗口时 spike 与 closedSpike 必须为 0");
+      if (cfg.closeFloor === 0n ? (cfg.closeBefore !== 0n || cfg.closeAfter !== 0n) : (cfg.closeFloor < cfg.openFloor || (cfg.closeBefore === 0n && cfg.closeAfter === 0n))) throw new Error("收盘曲线要求：关闭时两个窗口都为 0；启用时 closeFloor ≥ openFloor 且至少一个窗口非 0");
+      const signature = "setPoolConfig((address,address,uint24,int24,address),(uint24,uint24,uint24,uint8,uint24,uint32,uint24,uint32,uint32),uint24)";
+      tx = await c[signature](poolKey(), cfg, cap);
     }
     if (["forceClosed", "forceOpen", "restoreDefault"].includes(action)) {
       const readOnly = contract();
