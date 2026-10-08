@@ -97,28 +97,29 @@
         </article>
 
         <article id="calendarAdminSection" class="card hidden">
-          <div class="section-title"><div><p class="eyebrow">RWA 日历测试</p><h2>当天日历调整</h2></div></div>
-          <p class="hint">只对当前合约口径的美东日期执行操作。该区域需要日历配置权限；前端会在提交前读取并保留同月其他特殊交易日状态。</p>
+          <div class="section-title"><div><p class="eyebrow">RWA 日历测试</p><h2>指定日期日历调整</h2></div></div>
+          <p class="hint">选择需要调整的美东日期，默认填入当前合约口径的当天日期。该区域需要日历配置权限；提交时会保留同月其他特殊交易日状态。</p>
+          <label>操作日期（美东）<input id="calendarDateInput" type="date" min="0001-01-01" max="9999-12-31" required /><small>特殊交易日与提前收盘操作均使用此日期；切换日期会自动读取对应配置。</small></label>
           <dl class="config-snapshot calendar-current-state">
             <div><dt>当前操作日期</dt><dd id="calendarDate">读取后显示</dd></div>
-            <div><dt>当天特殊交易日</dt><dd id="calendarOverride">读取后显示</dd></div>
-            <div><dt>当天提前收盘</dt><dd id="calendarEarlyClose">读取后显示</dd></div>
-            <div><dt>当前日历时段</dt><dd id="calendarSession">读取后显示</dd></div>
+            <div><dt>所选日期特殊交易日</dt><dd id="calendarOverride">读取后显示</dd></div>
+            <div><dt>所选日期提前收盘</dt><dd id="calendarEarlyClose">读取后显示</dd></div>
+            <div><dt>当前实时日历时段</dt><dd id="calendarSession">读取后显示</dd></div>
           </dl>
           <hr />
           <div class="grid compact-grid">
             <div class="mini-form">
               <h3>特殊交易日</h3>
-              <p class="hint">当天全天关闭、全天开放，或恢复默认日历。操作会即时影响 `sessionAt` 与自主费率。</p>
-              <div class="button-row"><button data-action="forceClosed" class="danger">当天全天关闭</button><button data-action="forceOpen" class="primary">当天全天开放</button><button data-action="restoreDefault" class="secondary">恢复默认日历</button></div>
+              <p class="hint">将所选日期设为全天关闭、全天开放，或恢复默认日历。配置在该日期影响交易时段与自主费率。</p>
+              <div class="button-row"><button data-action="forceClosed" class="danger">所选日期全天关闭</button><button data-action="forceOpen" class="primary">所选日期全天开放</button><button data-action="restoreDefault" class="secondary">恢复默认日历</button></div>
             </div>
             <div class="mini-form">
               <h3>提前收盘</h3>
               <label>美东提前收盘时间<input id="earlyCloseTime" type="time" value="13:00" step="60" /><small>例如 13:00；只能提前收盘，不能修改单日开盘时间。</small></label>
-              <div class="button-row"><button data-action="setEarlyClose" class="primary">设置当天提前收盘</button><button data-action="clearEarlyClose" class="secondary">清除当天提前收盘</button></div>
+              <div class="button-row"><button data-action="setEarlyClose" class="primary">设置所选日期提前收盘</button><button data-action="clearEarlyClose" class="secondary">清除所选日期提前收盘</button></div>
             </div>
           </div>
-          <p class="hint">建议测试顺序：设置当天提前收盘并刷新核验；清除提前收盘；设为全天关闭；改为全天开放；最后恢复默认日历。提前收盘需在所设收盘时刻前提交才可验证当天的实时切换。</p>
+          <p class="hint">建议测试顺序：选择日期；设置提前收盘并刷新核验；清除提前收盘；设为全天关闭；改为全天开放；最后恢复默认日历。验证实时切换时，请选择当天并在所设收盘时刻前提交。</p>
         </article>
 
         <article class="card">

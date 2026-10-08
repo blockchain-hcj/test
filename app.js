@@ -169,6 +169,8 @@ function selectPool() {
   if (!pool) return;
   const values = {rpcUrl:pool.rpcUrl,chainId:pool.chainId,hook:pool.hook,poolId:pool.poolId,currency0:pool.currency0,currency1:pool.currency1,keyFee:pool.fee,tickSpacing:pool.tickSpacing,poolKind:pool.kind};
   Object.entries(values).forEach(([id, entry]) => { $(id).value = entry; });
+  calendarReadVersion++;
+  clearSelectedCalendarState();
   renderPoolSummary(pool); showKind(); updateDirections();
 
   log(`已选择 ${pool.name}。`);
@@ -207,9 +209,56 @@ function calendarLocalDate(timestamp, mode) {
   return { year: local.getUTCFullYear(), month: local.getUTCMonth() + 1, day: local.getUTCDate(), offsetHours };
 }
 function calendarDateLabel(date) {
-  return `${date.year}-${String(date.month).padStart(2,"0")}-${String(date.day).padStart(2,"0")}（美东 UTC−${date.offsetHours}）`;
+  return `${calendarDateValue(date)}（美东${date.offsetHours == null ? "" : ` UTC−${date.offsetHours}`}）`;
 }
-function daysInMonth(year, month) { return new Date(Date.UTC(year, month, 0)).getUTCDate(); }
+function daysInMonth(year, month) {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month, 0);
+  return date.getUTCDate();
+}
+function calendarDateValue(date) {
+  return `${String(date.year).padStart(4,"0")}-${String(date.month).padStart(2,"0")}-${String(date.day).padStart(2,"0")}`;
+}
+function selectedCalendarDate() {
+  const raw = value("calendarDateInput");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) throw new Error("请选择有效的美东操作日期");
+  const [year, month, day] = raw.split("-").map(Number);
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) throw new Error("请选择有效的美东操作日期");
+  return { year, month, day };
+}
+let calendarReadVersion = 0;
+function clearSelectedCalendarState(message = "读取后显示") {
+  $("calendarDate").textContent = value("calendarDateInput") ? `${value("calendarDateInput")}（美东）` : message;
+  $("calendarOverride").textContent = message;
+  $("calendarEarlyClose").textContent = message;
+}
+async function loadSelectedCalendarState(initialiseDate = true) {
+  const version = ++calendarReadVersion;
+  const selectedPool = value("poolPreset");
+  clearSelectedCalendarState("读取中…");
+  try {
+    const { poolId } = target();
+    const c = contract();
+    if (initialiseDate && !value("calendarDateInput")) {
+      const [block, mode] = await Promise.all([c.runner.provider.getBlock("latest"), c.dstMode(poolId)]);
+      if (version !== calendarReadVersion || selectedPool !== value("poolPreset")) return;
+      $("calendarDateInput").value = calendarDateValue(calendarLocalDate(block.timestamp, mode));
+    }
+    const date = selectedCalendarDate();
+    const [override, early] = await Promise.all([
+      c.dayOverride(poolId, date.year, date.month, date.day),
+      c.earlyClose(poolId, date.year, date.month, date.day),
+    ]);
+    if (version !== calendarReadVersion || selectedPool !== value("poolPreset")) return;
+    $("calendarDate").textContent = calendarDateLabel(date);
+    $("calendarOverride").textContent = DAY_OVERRIDE_LABELS[Number(override)] || `未知 (${override})`;
+    $("calendarEarlyClose").textContent = Number(early) ? `美东 ${secondsToClock(early)}` : "无（使用常规收盘）";
+  } catch (error) {
+    if (version !== calendarReadVersion || selectedPool !== value("poolPreset")) return;
+    clearSelectedCalendarState("读取失败，请选择有效日期或刷新重试");
+    reportError("所选日期读取失败", error);
+  }
+}
 function secondsToClock(seconds) {
   const n = Number(seconds);
   return `${String(Math.floor(n / 3600)).padStart(2,"0")}:${String(Math.floor(n % 3600 / 60)).padStart(2,"0")}`;
@@ -229,9 +278,6 @@ async function readCurrentCalendarState(c, poolId, timestamp, mode) {
   return { date, override: Number(override), early: Number(early), session: Number(session) };
 }
 function renderCurrentCalendarState(state) {
-  $("calendarDate").textContent = calendarDateLabel(state.date);
-  $("calendarOverride").textContent = DAY_OVERRIDE_LABELS[state.override] || `未知 (${state.override})`;
-  $("calendarEarlyClose").textContent = state.early ? `美东 ${secondsToClock(state.early)}` : "无（使用常规收盘）";
   $("calendarSession").textContent = ["OPEN", "OVERNIGHT", "CLOSED"][state.session] || `UNKNOWN (${state.session})`;
 }
 function protocolFeeDirections(packed) {
@@ -258,6 +304,7 @@ function renderProtocolAndClaimState({ manager, controller, protocolFee, claimFe
 }
 
 async function loadState() {
+  if (poolKind() === "rwa") void loadSelectedCalendarState();
   const selectedPool = value("poolPreset");
   try {
     const { poolId } = target(); const c = contract(true); const timestamp = BigInt(Math.floor(Date.now()/1000));
@@ -291,6 +338,9 @@ async function loadState() {
 
 async function send(action, button) {
   try {
+    const calendarAction = ["forceClosed", "forceOpen", "restoreDefault", "setEarlyClose", "clearEarlyClose"].includes(action);
+    if (calendarAction && poolKind() !== "rwa") throw new Error("仅 RWA 池支持日历调整");
+    const date = calendarAction ? selectedCalendarDate() : null;
     if (!walletAdapter?.connected) { walletAdapter?.openConnect(); toast("请先在弹窗选择钱包，连接后再提交。"); return; }
     setBusy(button, true);
     const signer = await walletAdapter.getSigner();
@@ -324,9 +374,6 @@ async function send(action, button) {
     }
     if (["forceClosed", "forceOpen", "restoreDefault"].includes(action)) {
       const readOnly = contract();
-      const block = await readOnly.runner.provider.getBlock("latest");
-      const mode = await readOnly.dstMode(poolId);
-      const date = calendarLocalDate(BigInt(block.timestamp), mode);
       if (!confirm(`确认将 ${calendarDateLabel(date)} 设置为${action === "forceClosed" ? "全天关闭" : action === "forceOpen" ? "全天开放" : "默认日历"}？前端会保留同月其他特殊日期。`)) return;
       let packed = 0n;
       const days = daysInMonth(date.year, date.month);
@@ -339,10 +386,6 @@ async function send(action, button) {
       tx = await c.setDayOverrides(poolId, date.year * 100 + date.month, packed);
     }
     if (action === "setEarlyClose" || action === "clearEarlyClose") {
-      const readOnly = contract();
-      const block = await readOnly.runner.provider.getBlock("latest");
-      const mode = await readOnly.dstMode(poolId);
-      const date = calendarLocalDate(BigInt(block.timestamp), mode);
       const closeSec = action === "clearEarlyClose" ? 0n : easternClockToSeconds(value("earlyCloseTime"));
       if (!confirm(`确认${action === "clearEarlyClose" ? "清除" : `将`} ${calendarDateLabel(date)}${action === "clearEarlyClose" ? "的提前收盘设置" : `设置为美东 ${value("earlyCloseTime")} 提前收盘`}？`)) return;
       tx = await c.setEarlyClose(poolId, date.year, date.month, date.day, closeSec);
@@ -371,6 +414,7 @@ function calendarReference(open,close,mode) {
  const bj=(sec)=>{const n=Number(sec)+(8+offset)*3600;return clockFromSeconds(n%86400)+(n>=86400?"（次日）":"（同日）");};
  return "美东 "+clockFromSeconds(open)+"–"+clockFromSeconds(close)+"；北京 "+bj(open)+"–"+bj(close)+"；"+(Number(mode)===0?"自动夏令时":"固定时差")+"。常规时段仅供参照，休市和提前收盘以链上日历为准。";
 }
+$("calendarDateInput").addEventListener("change", () => { void loadSelectedCalendarState(false); });
 $("loadButton").addEventListener("click",loadState); $("poolPreset").addEventListener("change",selectPool); $("switchNetwork").addEventListener("click",switchNetwork); ["currency0","currency1"].forEach(id=>$(id).addEventListener("input",updateDirections)); $("clearLog").addEventListener("click",()=>$("activityLog").replaceChildren());
 document.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => { const action = button.dataset.action; return send(action, button); }));
 function updatePipsHint(id) {
