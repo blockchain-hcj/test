@@ -21,6 +21,7 @@ const ABI = [
   "function poolManager() view returns (address)", "function claimFeeBps(bytes32) view returns (uint16)", "function claimFeeRecipient() view returns (address)",
   "function pokeFee(bytes32,uint24,uint24,uint40)", "function clearPoke(bytes32)",
   "function setDayOverrides(bytes32,uint256,uint64)", "function setEarlyClose(bytes32,uint256,uint256,uint256,uint32)",
+  "function setDstMode(bytes32,uint8)",
   "function setClaimFeeBps((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks),uint16)",
 ];
 const POOL_MANAGER_ABI = [
@@ -171,6 +172,8 @@ function selectPool() {
   Object.entries(values).forEach(([id, entry]) => { $(id).value = entry; });
   calendarReadVersion++;
   clearSelectedCalendarState();
+  $("dstModeCurrent").textContent = "读取后显示";
+  $("dstModeInput").value = "";
   renderPoolSummary(pool); showKind(); updateDirections();
 
   log(`已选择 ${pool.name}。`);
@@ -198,6 +201,11 @@ function updateDirections() {
 }
 
 const DAY_OVERRIDE_LABELS = ["默认日历（NONE）", "全天关闭（FORCE_CLOSED）", "全天开放（FORCE_OPEN）"];
+const DST_MODE_LABELS = ["自动夏令时（AUTO）", "固定冬令时（FIXED_EST · UTC−5）", "固定夏令时（FIXED_EDT · UTC−4）"];
+function renderDstMode(mode) {
+  $("dstModeCurrent").textContent = DST_MODE_LABELS[Number(mode)] || `未知 (${mode})`;
+  $("dstModeInput").value = [0, 1, 2].includes(Number(mode)) ? mode.toString() : "";
+}
 function calendarLocalDate(timestamp, mode) {
   const millis = Number(timestamp) * 1000;
   const utc = new Date(millis);
@@ -325,6 +333,7 @@ async function loadState() {
       const [fc, session, open, close, dst] = await Promise.all([c.floorConfig(poolId), c.sessionAt(poolId,timestamp), c.openSec(poolId), c.closeSec(poolId), c.dstMode(poolId)]);
       if (selectedPool !== value("poolPreset")) return;
       setRwaConfigInputs(fc, cap);
+      renderDstMode(dst);
       const calendarState = await readCurrentCalendarState(c, poolId, timestamp, dst);
       if (selectedPool !== value("poolPreset")) return;
       $("session").textContent = ["OPEN","OVERNIGHT","CLOSED"][Number(session)] || `UNKNOWN (${session})`; $("sessionDetail").textContent = calendarReference(open,close,dst);
@@ -341,6 +350,13 @@ async function send(action, button) {
     const calendarAction = ["forceClosed", "forceOpen", "restoreDefault", "setEarlyClose", "clearEarlyClose"].includes(action);
     if (calendarAction && poolKind() !== "rwa") throw new Error("仅 RWA 池支持日历调整");
     const date = calendarAction ? selectedCalendarDate() : null;
+    let dstMode;
+    if (action === "setDstMode") {
+      if (poolKind() !== "rwa") throw new Error("仅 RWA 池支持夏令时模式调整");
+      const raw = value("dstModeInput");
+      if (!["0", "1", "2"].includes(raw)) throw new Error("请选择有效的夏令时模式");
+      dstMode = Number(raw);
+    }
     if (!walletAdapter?.connected) { walletAdapter?.openConnect(); toast("请先在弹窗选择钱包，连接后再提交。"); return; }
     setBusy(button, true);
     const signer = await walletAdapter.getSigner();
@@ -348,6 +364,10 @@ async function send(action, button) {
     if (network.chainId !== 5042n) throw new Error("请先将钱包切换到 Arc 网络，再提交。");
     const { hook, poolId } = target();
     const c = new ethers.Contract(hook, ABI, signer); let tx;
+    if (action === "setDstMode") {
+      if (!confirm(`确认将当前池夏令时模式设置为${DST_MODE_LABELS[dstMode]}？该设置影响整个池的日历时间换算；固定模式必须与当前 AUTO 时钟一致。`)) return;
+      tx = await c.setDstMode(poolId, dstMode);
+    }
     if (action === "poke") { const a=numberValue("fee0For1"), b=numberValue("fee1For0"), ttl=numberValue("ttl"); if(a===0n&&b===0n) throw new Error("两个方向不能同时为 0；清除请使用 clearPoke。"); if(ttl===0n||ttl>259200n) throw new Error("TTL 必须在 1–259200 秒内。"); tx = await c.pokeFee(poolId,a,b,ttl); }
     if (action === "clearPoke") { if (!confirm("确认清除链上双向覆盖并恢复当前自主费率？")) return; tx = await c.clearPoke(poolId); }
     if (action === "setClaimFee") {

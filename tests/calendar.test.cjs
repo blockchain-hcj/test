@@ -24,6 +24,7 @@ function setup(date = '2028-02-29') {
     runner: { provider: { getBlock: async () => ({ timestamp: Date.parse('2026-10-08T02:00:00Z') / 1000 }) } },
   };
   const writer = {
+    setDstMode: async (...args) => { calls.push(['writeDstMode', ...args]); return tx; },
     setDayOverrides: async (...args) => { calls.push(['writeOverride', ...args]); return tx; },
     setEarlyClose: async (...args) => { calls.push(['writeEarly', ...args]); return tx; },
   };
@@ -118,4 +119,61 @@ test('date captured at submission survives changes during wallet connection', as
   await pending;
   assert.deepEqual(app.calls.find(call => call[0] === 'writeOverride'),
     ['writeOverride', app.poolId, 202701, 2n | (1n << 28n)]);
+});
+
+test('all DST modes submit for the pool without requiring an operation date', async () => {
+  for (const mode of [0, 1, 2]) {
+    const app = setup('');
+    app.element('dstModeInput').value = String(mode);
+    await app.send('setDstMode');
+    assert.deepEqual(app.calls, [['writeDstMode', app.poolId, mode]]);
+    assert.deepEqual(app.errors, []);
+  }
+});
+
+test('invalid DST modes and crypto pools cannot submit', async () => {
+  for (const mode of ['', '3', '-1', '1.0']) {
+    const app = setup();
+    app.element('dstModeInput').value = mode;
+    await app.send('setDstMode');
+    assert.equal(app.calls.length, 0);
+    assert.match(app.errors[0], /有效的夏令时模式/);
+  }
+  const app = setup();
+  app.element('poolKind').value = 'crypto';
+  app.element('dstModeInput').value = '0';
+  await app.send('setDstMode');
+  assert.equal(app.calls.length, 0);
+  assert.match(app.errors[0], /仅 RWA/);
+});
+
+test('DST selection is captured before wallet waits and refresh follows confirmation', async () => {
+  const app = setup();
+  let resolveSigner;
+  app.context.signerReady = new Promise(resolve => { resolveSigner = resolve; });
+  app.run('setWalletAdapter({ connected: true, getSigner: () => signerReady }); loadState = async () => reader.refreshed = true');
+  app.element('dstModeInput').value = '2';
+  const pending = app.send('setDstMode');
+  app.element('dstModeInput').value = '1';
+  resolveSigner({ provider: { getNetwork: async () => ({ chainId: 5042n }) } });
+  await pending;
+  assert.deepEqual(app.calls, [['writeDstMode', app.poolId, 2]]);
+  assert.equal(app.reader.refreshed, true);
+});
+
+test('cancelling DST confirmation does not submit', async () => {
+  const app = setup();
+  app.element('dstModeInput').value = '0';
+  app.context.confirm = () => false;
+  await app.send('setDstMode');
+  assert.equal(app.calls.length, 0);
+});
+
+test('chain DST mode fills the selector and current value', () => {
+  const app = setup();
+  for (const [mode, label] of [[0, 'AUTO'], [1, 'FIXED_EST'], [2, 'FIXED_EDT']]) {
+    app.run(`renderDstMode(${mode}n)`);
+    assert.equal(app.element('dstModeInput').value, String(mode));
+    assert.ok(app.element('dstModeCurrent').textContent.includes(label));
+  }
 });

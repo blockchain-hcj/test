@@ -56,6 +56,8 @@ npm run preview
 
 修改指定日期的特殊交易日时，前端会重新构造并提交完整月份状态，以保留同月其他已配置日期。
 
+RWA 日历区域支持读取并修改 `dstMode`：`0=AUTO`、`1=FIXED_EST`（UTC−5）、`2=FIXED_EDT`（UTC−4）。通过 `setDstMode(poolId, mode)` 提交，需对应的 AccessManager 权限；该设置作用于整个池，不依赖所选日期。固定模式必须与提交当下 AUTO 的偏移一致，否则合约返回 `DstModeDisagreesWithClock`。交易确认后自动刷新链上模式与日历状态。
+
 输入校验仅辅助操作，权限、边界和 50% 保护以合约为准；接口读值作参考，验收以 Swap 事件的 fee 为准。本轮不启用自动调费策略。
 
 RPC 与池白名单在 `app.js`，钱包链配置在 `wallet.jsx`，更换 RPC 时两处保持一致。浏览器可见配置不要包含秘密密钥。
