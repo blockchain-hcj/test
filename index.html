@@ -32,11 +32,11 @@
       <section class="card connection-card">
         <div class="section-title"><div><p class="eyebrow">01 / TARGET</p><h2>链与目标池</h2></div><button id="loadButton" class="secondary">刷新链上状态</button></div>
         <div class="pool-picker">
-          <label>已部署测试池 <select id="poolPreset"></select></label>
+          <label>已部署池 <select id="poolPreset"></select></label>
           <button id="switchNetwork" class="secondary">切换到此链</button>
         </div>
         <dl id="poolSummary" class="pool-summary"></dl>
-        <!-- 由“已部署测试池”选择器自动填写，不向管理员展示或开放手动编辑。 -->
+        <!-- 由“已部署池”选择器自动填写，不向管理员展示或开放手动编辑。 -->
         <input id="rpcUrl" type="hidden" /><input id="chainId" type="hidden" /><input id="hook" type="hidden" />
         <input id="poolId" type="hidden" /><input id="currency0" type="hidden" /><input id="currency1" type="hidden" />
         <input id="keyFee" type="hidden" /><input id="tickSpacing" type="hidden" /><input id="poolKind" type="hidden" />
@@ -140,7 +140,7 @@
           <label>临时费率持续时间（秒）<input id="ttl" type="number" value="7200" min="1" max="259200" /><small>文档参数 ttl：7200 秒 = 2 小时，为拟用值；当前合约最大 259200 秒 = 72 小时。</small></label>
           <div class="button-row"><button data-action="poke" class="primary">写入 / 续期 · pokeFee</button><button data-action="clearPoke" class="danger">清除覆盖 / 恢复基础费率 · clearPoke</button></div>
           <p class="hint"><strong>写入 / 续期：</strong>调用 pokeFee(poolId, fee0For1, fee1For0, ttl)，双向值一起保存，到期时间从本次链上执行时刻重新计算。单边 0 沿用该方向自主费率；双边 0 拒绝。</p>
-          <p class="hint"><strong>清除覆盖：</strong>调用 clearPoke(poolId)。链上成功后，pokeOf 双向值与 expiry 都归零；tBTC 恢复 flat 费率，tQQQ / tCRCL 恢复当前日历时段自主费率。此操作不会修改基础配置。</p>
+          <p class="hint"><strong>清除覆盖：</strong>调用 clearPoke(poolId)。链上成功后，pokeOf 双向值与 expiry 都归零；Crypto 池恢复 flat 费率，RWA 池恢复当前日历时段自主费率。此操作不会修改基础配置。</p>
           <p class="hint"><strong>自然到期：</strong>覆盖失效后恢复自主费率，但 pokeOf 中旧的双向值和 expiry 可能仍保留。不要把“到期失效”和“主动清除”当成同一状态。</p>
           <hr />
           <p class="hint">对应文档 4.3：有效且非零的覆盖实际收费至少为当前自主费率的一半（按 pips 向下取整），并受请求下限与上限限制。普通周一至周四收盘后进入隔夜，周五收盘后进入休市；日历切换不改变存储的覆盖与 expiry。接口读值仅作参考，最终验收以 Swap 事件的 fee 为准。本轮不启用自动调费策略。</p>

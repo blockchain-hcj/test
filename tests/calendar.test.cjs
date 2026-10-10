@@ -6,6 +6,7 @@ const vm = require('node:vm');
 // Exercise the application's read and transaction paths without signing on chain.
 const source = fs.readFileSync(new URL('../app.js', `file://${__filename}`), 'utf8')
   .replace('import { ethers } from "ethers";', '')
+  .replace('import { NETWORKS } from "./networks.js";', '')
   .replace('export function setWalletAdapter', 'function setWalletAdapter')
   .split('$("calendarDateInput").addEventListener')[0];
 function setup(date = '2028-02-29') {
@@ -14,7 +15,7 @@ function setup(date = '2028-02-29') {
   const calls = [], confirmations = [], errors = [];
   const poolId = '0x' + '2'.repeat(64);
   Object.entries({ calendarDateInput: date, poolKind: 'rwa', poolPreset: 'rwa-test',
-    hook: '0x' + '1'.repeat(40), poolId, earlyCloseTime: '13:00' })
+    chainId: '5042', hook: '0x' + '1'.repeat(40), poolId, earlyCloseTime: '13:00' })
     .forEach(([id, value]) => { element(id).value = value; });
   const tx = { hash: '0xtest', wait: async () => ({ hash: '0xtest' }) };
   const reader = {
@@ -31,6 +32,7 @@ function setup(date = '2028-02-29') {
   const context = vm.createContext({ document: { getElementById: element },
     ethers: { Contract: function () { return writer; } }, reader, errors,
     confirm: message => { confirmations.push(message); return true; } });
+  vm.runInContext(fs.readFileSync(new URL('../networks.js', `file://${__filename}`), 'utf8').replace('export const', 'const'), context);
   vm.runInContext(source, context);
   vm.runInContext(`contract = () => reader; loadState = async () => {};
     toast = () => {}; log = () => {}; reportError = (prefix, error) => errors.push(error.message);
@@ -176,4 +178,111 @@ test('chain DST mode fills the selector and current value', () => {
     assert.equal(app.element('dstModeInput').value, String(mode));
     assert.ok(app.element('dstModeCurrent').textContent.includes(label));
   }
+});
+
+test('BSC PoolKeys match supplied PoolIds and use the correct hooks', async () => {
+  const { ethers } = await import('ethers');
+  const app = setup();
+  const pools = app.run('POOLS.filter(pool => pool.chainId === 56)');
+  assert.equal(pools.length, 7);
+  for (const pool of pools) {
+    assert.equal(pool.fee, 0x800000);
+    assert.equal(pool.tickSpacing, ['bsc-tbspy-tusdt', 'bsc-tbcrcl-tusdt'].includes(pool.id) ? 10 : 1);
+    assert.ok(BigInt(pool.currency0) < BigInt(pool.currency1));
+    const computed = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+      ['address', 'address', 'uint24', 'int24', 'address'],
+      [pool.currency0, pool.currency1, pool.fee, pool.tickSpacing, pool.hook]));
+    assert.equal(computed, pool.poolId, pool.id);
+  }
+  assert.equal(pools.find(pool => pool.id === 'bsc-bnb-usdt').currency0, ethers.ZeroAddress);
+  assert.equal(pools.find(pool => pool.id === 'bsc-wbnb-usdt').currency0Symbol, 'USDT');
+});
+
+function selectBsc(app, id = 'bsc-tqqq-tusdt') {
+  app.context.pool = app.run(`POOLS.find(pool => pool.id === '${id}')`);
+  app.run(`Object.entries({ poolPreset: pool.id, chainId: pool.chainId, poolKind: pool.kind,
+    hook: pool.hook, poolId: pool.poolId, currency0: pool.currency0, currency1: pool.currency1,
+    keyFee: pool.fee, tickSpacing: pool.tickSpacing }).forEach(([id, v]) => document.getElementById(id).value = String(v));`);
+}
+
+test('BSC calendar transactions use the selected Hook and PoolId on chain 56', async () => {
+  const app = setup();
+  selectBsc(app);
+  app.run('setWalletAdapter({ connected: true, chainId: 56, getSigner: async () => ({ provider: { getNetwork: async () => ({ chainId: 56n }) } }) })');
+  app.element('dstModeInput').value = '0';
+  await app.send('setDstMode');
+  assert.deepEqual(app.calls, [['writeDstMode', app.context.pool.poolId, 0]]);
+  assert.deepEqual(app.errors, []);
+  assert.equal(app.element('networkBadge').textContent, 'BSC 已连接');
+});
+
+test('wrong-chain wallets cannot submit for either Arc or BSC', async () => {
+  for (const targetChain of [5042, 56]) {
+    const app = setup();
+    if (targetChain === 56) selectBsc(app);
+    app.context.wrongChain = targetChain === 56 ? 5042n : 56n;
+    app.run('setWalletAdapter({ connected: true, getSigner: async () => ({ provider: { getNetwork: async () => ({ chainId: wrongChain }) } }) })');
+    app.element('dstModeInput').value = '0';
+    await app.send('setDstMode');
+    assert.equal(app.calls.length, 0);
+    assert.match(app.errors[0], targetChain === 56 ? /切换到 BSC/ : /切换到 Arc/);
+  }
+});
+
+test('network switching follows the selected pool', async () => {
+  const app = setup();
+  app.context.switches = [];
+  app.run('setWalletAdapter({ connected: true, switchChain: async id => switches.push(id) })');
+  await app.run('switchNetwork()');
+  selectBsc(app);
+  await app.run('switchNetwork()');
+  assert.deepEqual(Array.from(app.context.switches), [5042, 56]);
+});
+
+test('switching pools while the wallet is pending aborts submission', async () => {
+  const app = setup();
+  selectBsc(app);
+  let resolveSigner;
+  app.context.signerReady = new Promise(resolve => { resolveSigner = resolve; });
+  app.run('setWalletAdapter({ connected: true, getSigner: () => signerReady })');
+  app.element('dstModeInput').value = '0';
+  const pending = app.send('setDstMode');
+  selectBsc(app, 'bsc-qqqb-usdt');
+  resolveSigner({ provider: { getNetwork: async () => ({ chainId: 56n }) } });
+  await pending;
+  assert.equal(app.calls.length, 0);
+  assert.match(app.errors[0], /目标池已切换/);
+});
+
+test('tbSPY uses tickSpacing 10 and supports calendar transactions', async () => {
+  const app = setup();
+  selectBsc(app, 'bsc-tbspy-tusdt');
+  app.run('setWalletAdapter({ connected: true, getSigner: async () => ({ provider: { getNetwork: async () => ({ chainId: 56n }) } }) })');
+  app.element('dstModeInput').value = '0';
+  await app.send('setDstMode');
+  assert.deepEqual(app.calls, [['writeDstMode', app.context.pool.poolId, 0]]);
+  assert.deepEqual(app.errors, []);
+  assert.equal(app.run('poolKey().tickSpacing'), 10);
+});
+
+test('selecting BSC resets stale state and updates network, directions and PoolKey', () => {
+  const app = setup();
+  for (const id of ['sessionMetric', 'calendarAdminSection', 'rwaConfigCard']) {
+    app.element(id).classList = { toggle() {} };
+  }
+  app.run('loadState = async () => {}');
+  app.element('poolPreset').value = 'bsc-wbnb-usdt';
+  app.element('current0For1').textContent = 'old fee';
+  app.element('rwaMaxFee').value = 'old cap';
+  app.run('selectPool()');
+  assert.equal(app.element('chainId').value, '56');
+  assert.match(app.element('poolSummary').innerHTML, /BSC · Chain 56/);
+  assert.equal(app.element('direction0Label').textContent, 'USDT → WBNB');
+  assert.equal(app.element('current0For1').textContent, '—');
+  assert.equal(app.element('rwaMaxFee').value, '');
+  app.element('poolPreset').value = 'bsc-tbspy-tusdt';
+  app.run('selectPool()');
+  assert.equal(app.element('tickSpacing').value, '10');
+  assert.equal(app.element('stateUpdated').textContent, '正在自动读取…');
+  assert.equal(app.element('direction0Label').textContent, 'tbSPY → tUSDT');
 });

@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { NETWORKS } from "./networks.js";
 // Wallet signatures authorize direct Hook calls.
 const ABI = [
   "error Error(string)", "error Panic(uint256)",
@@ -30,7 +31,23 @@ const POOL_MANAGER_ABI = [
   "function setProtocolFee((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks),uint24)",
 ];
 
-// 仅收录仓库已记录的 Arc 部署池；新增池须先在此白名单中审核登记。
+// BSC deployment supplied for bstock integration. All pools use dynamic fees.
+const BSC_DEPLOYMENT = {
+  poolManager: "0x28e2ea090877bf75740558f6bfb36a5ffee9e9df",
+  accessManager: "0x4224a11d9a1a3af53b908600fd63c197a66cd58f",
+  poolRegistry: "0x24d3c7983c1b0757a907a451dd0bb78ba2ea3e13",
+  ramp: "0xe093ff9a2225d58c8989737be4f469fe7f882080",
+  rampETH: "0x26a7ad2d1da937e7ce351e02cb921eeccd1fe080",
+  rwaRamp: "0x05ef39f8d183cb29ef70938386a62c2409b72080",
+  rampReader: "0xdf26d95637b545f0ccfbfd2839fd62ff4ccb33ac",
+  zapRouter: "0xcbb62fca12bdc3e62b6ae871c36fd8152a0f2d1b",
+  zapRouterHelper: "0x2ae7c7db543331cdcbe2e536a93f0603aa83ca11",
+};
+const BSC_POOL_DEFAULTS = {
+  chainId: 56, rpcUrl: NETWORKS[56].rpcUrls.default.http[0],
+  fee: 0x800000, tickSpacing: 1, source: "bstock · BSC 合约部署清单",
+};
+// Deployed pools from Arc records and the BSC bstock deployment list.
 const POOLS = [
   {
     id: "arc-tbtc-tusdc-test", name: "Arc · tBTC / tUSDC · Crypto 测试池", chainId: 5042,
@@ -55,6 +72,56 @@ const POOLS = [
     currency0: "0x44e90eb500868af9b0b16406f3ce165c90e1e85e", currency1: "0xf933e55b1fd15089582f97bcaa2ef1e4539cf0d0",
     fee: 8388608, tickSpacing: 1, hook: "0x7049b3d3e87ad5dab65caf2a7834e9b7bf582080",
     currency0Symbol: "tUSDC", currency1Symbol: "tCRCL", source: "docs/test-pools/arc.json"
+  },
+  {
+    ...BSC_POOL_DEFAULTS,
+    id: "bsc-wbnb-usdt", name: "BSC · WBNB / USDT · Crypto", kind: "crypto",
+    poolId: "0x831c5a538f5a523080b0285ac1f43ad806ec5462c7cb3fac84b3d1f9130211e8",
+    currency0: "0x55d398326f99059ff775485246999027b3197955", currency1: "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+    hook: BSC_DEPLOYMENT.ramp, currency0Symbol: "USDT", currency1Symbol: "WBNB"
+  },
+  {
+    ...BSC_POOL_DEFAULTS,
+    id: "bsc-bnb-usdt", name: "BSC · BNB / USDT · Crypto", kind: "crypto",
+    poolId: "0xbdba5b3dcfe77c95f102d24722b6158b299c363463b3109209e0551708bc4f46",
+    currency0: "0x0000000000000000000000000000000000000000", currency1: "0x55d398326f99059ff775485246999027b3197955",
+    hook: BSC_DEPLOYMENT.rampETH, currency0Symbol: "BNB", currency1Symbol: "USDT"
+  },
+  {
+    ...BSC_POOL_DEFAULTS,
+    id: "bsc-qqqb-usdt", name: "BSC · QQQB / USDT · RWA", kind: "rwa",
+    poolId: "0x94d26f93ad766e84d6933d306a024738713433805eb2117c6891b3b785c749a3",
+    currency0: "0x205812cdbed920aff76c6580abd681a46d11efc7", currency1: "0x55d398326f99059ff775485246999027b3197955",
+    hook: BSC_DEPLOYMENT.rwaRamp, currency0Symbol: "QQQB", currency1Symbol: "USDT"
+  },
+  {
+    ...BSC_POOL_DEFAULTS,
+    id: "bsc-tbnb-tusdt", name: "BSC · tBNB / tUSDT · Crypto", kind: "crypto",
+    poolId: "0xd6d1aab4526322d846a28a66aa39b2273bf6e67ad2fb09e363c0bee2bc128afc",
+    currency0: "0x78e708f1f8fe842abaaeaf23ade31e524e153980", currency1: "0x8a5218b1b296ced5c88cd55c256fcb58c32f227d",
+    hook: BSC_DEPLOYMENT.ramp, currency0Symbol: "tBNB", currency1Symbol: "tUSDT"
+  },
+  {
+    ...BSC_POOL_DEFAULTS,
+    id: "bsc-tqqq-tusdt", name: "BSC · tQQQ / tUSDT · RWA", kind: "rwa",
+    poolId: "0x92ce089e0eeb0adec19af4e8b84e9c24970ebaf86ae1d48c79608575c57ef4e2",
+    currency0: "0x51984c455a78c072f9a23453e236bd3729dc3efd", currency1: "0x8a5218b1b296ced5c88cd55c256fcb58c32f227d",
+    hook: BSC_DEPLOYMENT.rwaRamp, currency0Symbol: "tQQQ", currency1Symbol: "tUSDT"
+  },
+  {
+    ...BSC_POOL_DEFAULTS,
+    id: "bsc-tbspy-tusdt", name: "BSC · tbSPY / tUSDT · RWA", kind: "rwa", tickSpacing: 10,
+    poolId: "0x3034c686b234c89f83ce4cf19e1ad2ab4ca7c1bbc7d66373bf7138dce89f7247",
+    currency0: "0x77040c6a54744a2460f89dd61e90bbb640b9a91f", currency1: "0x8a5218b1b296ced5c88cd55c256fcb58c32f227d",
+    hook: BSC_DEPLOYMENT.rwaRamp, currency0Symbol: "tbSPY", currency1Symbol: "tUSDT"
+  },
+  {
+    ...BSC_POOL_DEFAULTS,
+    id: "bsc-tbcrcl-tusdt", name: "BSC · tbCRCL / tUSDT · RWA", kind: "rwa", tickSpacing: 10,
+    poolId: "0x7af171c1217b6ce3079ef938b2bab6b8c257ef632349342d96a43690c0a1f598",
+    currency0: "0x8a5218b1b296ced5c88cd55c256fcb58c32f227d", currency1: "0xab679d2d3a1f6b0f044b817cb11deafa5d6ab184",
+    hook: BSC_DEPLOYMENT.rwaRamp, currency0Symbol: "tUSDT", currency1Symbol: "tbCRCL",
+    source: "用户提供 · BSC tbCRCL/tUSDT 已部署池"
   }
 ];
 
@@ -63,7 +130,15 @@ const value = (id) => $(id).value.trim();
 const numberValue = (id) => { if ($(id).hasAttribute("data-bp")) { const raw = value(id); if (!/^\d+(\.\d{1,2})?$/.test(raw)) throw new Error("费率必须为非负数，最多两位小数（bp）"); const [whole, fraction = ""] = raw.split("."); return BigInt(whole) * 100n + BigInt(fraction.padEnd(2,"0")); } const raw = value(id); if (raw === "") throw new Error(`请填写 ${id}`); if (!/^\d+$/.test(raw)) throw new Error(`${id} 必须为非负整数`); return BigInt(raw); };
 const integerValue = (id) => { const raw = value(id); if (!/^\d+$/.test(raw)) throw new Error(`${id} 必须为非负整数`); return BigInt(raw); };
 let walletAdapter;
-export function setWalletAdapter(adapter) { walletAdapter = adapter; }
+export function setWalletAdapter(adapter) { walletAdapter = adapter; renderNetworkStatus(); }
+function renderNetworkStatus() {
+  const network = NETWORKS[Number(value("chainId"))];
+  if (!network) return;
+  const matched = walletAdapter?.connected && walletAdapter.chainId === network.id;
+  $("networkBadge").textContent = walletAdapter?.connected
+    ? (matched ? `${network.name} 已连接` : `请切换到 ${network.name}`) : `目标网络 ${network.name}`;
+  $("networkBadge").className = `badge ${matched ? "ok" : "muted"}`;
+}
 
 function isAddress(v) { return /^0x[a-fA-F0-9]{40}$/.test(v); }
 function isPoolId(v) { return /^0x[a-fA-F0-9]{64}$/.test(v); }
@@ -153,7 +228,7 @@ function showKind() {
   $("rwaConfigCard").classList.toggle("hidden", !rwa);
 }
 function renderPoolSummary(pool) {
-  const fields = [["网络", `Arc · Chain ${pool.chainId}`], ["类型", pool.kind === "rwa" ? "RWA / Calendar" : "Crypto / Flat"], ["记录来源", pool.source], ["Pool ID", pool.poolId], ["Hook", pool.hook], ["PoolKey", `${pool.currency0Symbol} / ${pool.currency1Symbol} · fee ${pool.fee} · tick ${pool.tickSpacing}`]];
+  const fields = [["网络", `${NETWORKS[pool.chainId].name} · Chain ${pool.chainId}`], ["类型", pool.kind === "rwa" ? "RWA / Calendar" : "Crypto / Flat"], ["记录来源", pool.source], ["Pool ID", pool.poolId], ["Hook", pool.hook], ["PoolKey", `${pool.currency0Symbol} / ${pool.currency1Symbol} · fee ${pool.fee} · tick ${pool.tickSpacing}`]];
   $("poolSummary").innerHTML = fields.map(([k,v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join("");
 }
 function renderConfigSnapshot(fields, loadingMessage = "") {
@@ -169,16 +244,20 @@ function selectPool() {
   const pool = POOLS.find((entry) => entry.id === value("poolPreset"));
   if (!pool) return;
   const values = {rpcUrl:pool.rpcUrl,chainId:pool.chainId,hook:pool.hook,poolId:pool.poolId,currency0:pool.currency0,currency1:pool.currency1,keyFee:pool.fee,tickSpacing:pool.tickSpacing,poolKind:pool.kind};
-  Object.entries(values).forEach(([id, entry]) => { $(id).value = entry; });
+  Object.entries(values).forEach(([id, entry]) => { $(id).value = String(entry); });
   calendarReadVersion++;
   clearSelectedCalendarState();
   $("dstModeCurrent").textContent = "读取后显示";
   $("dstModeInput").value = "";
-  renderPoolSummary(pool); showKind(); updateDirections();
+  renderPoolSummary(pool); showKind(); updateDirections(); renderNetworkStatus();
+  ["current0For1", "current1For0", "feeBand", "pokeExpiry", "session", "protocolManager", "protocolController", "protocol0For1", "protocol1For0", "claimFeeCurrent", "claimFeeRecipient", "calendarSession"].forEach(id => { $(id).textContent = "—"; });
+  $("pokeValues").textContent = "读取后显示";
+  $("sessionDetail").textContent = "美东日历";
+  ["claimFeeBps", "openFloor", "overnightFloor", "closedFloor", "spikeMult", "closedSpike", "descentWindow", "closeFloor", "closeBefore", "closeAfter", "rwaMaxFee"].forEach(id => { $(id).value = ""; });
 
   log(`已选择 ${pool.name}。`);
   $("stateUpdated").textContent = "正在自动读取…";
-  renderConfigSnapshot([], "正在通过 Arc RPC 获取当前参数…");
+  renderConfigSnapshot([], `正在通过 ${NETWORKS[pool.chainId].name} RPC 获取当前参数…`);
   void loadState();
 }
 function initialisePools() {
@@ -190,7 +269,7 @@ function initialisePools() {
 async function switchNetwork() {
   try {
     if (!walletAdapter?.connected) { walletAdapter?.openConnect(); return; }
-    await walletAdapter.switchChain();
+    await walletAdapter.switchChain(Number(value("chainId")));
   } catch (error) { reportError("切换网络失败", error); }
 }
 function updateDirections() {
@@ -347,6 +426,9 @@ async function loadState() {
 
 async function send(action, button) {
   try {
+    const submittedPool = value("poolPreset");
+    const submittedChainId = BigInt(value("chainId"));
+    target();
     const calendarAction = ["forceClosed", "forceOpen", "restoreDefault", "setEarlyClose", "clearEarlyClose"].includes(action);
     if (calendarAction && poolKind() !== "rwa") throw new Error("仅 RWA 池支持日历调整");
     const date = calendarAction ? selectedCalendarDate() : null;
@@ -361,7 +443,8 @@ async function send(action, button) {
     setBusy(button, true);
     const signer = await walletAdapter.getSigner();
     const network = await signer.provider.getNetwork();
-    if (network.chainId !== 5042n) throw new Error("请先将钱包切换到 Arc 网络，再提交。");
+    if (submittedPool !== value("poolPreset")) throw new Error("目标池已切换，请重新提交。");
+    if (network.chainId !== submittedChainId) throw new Error(`请先将钱包切换到 ${NETWORKS[Number(submittedChainId)].name} 网络，再提交。`);
     const { hook, poolId } = target();
     const c = new ethers.Contract(hook, ABI, signer); let tx;
     if (action === "setDstMode") {

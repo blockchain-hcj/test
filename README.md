@@ -2,7 +2,9 @@
 
 独立前端仓库，从 `cetus/univ4/fee-admin` 迁出。不依赖合约仓库、Redis 或后端。
 
-支持 Arc（Chain ID 5042）的 tBTC/tUSDC、tQQQ/tUSDC、tCRCL/tUSDC 三个池。自动读取链上参数；测试人员可调整双向临时费率、TTL，以及 RWA 指定日期日历状态。1 bp = 100 pips，输入旁实时显示换算。
+支持 Arc（Chain ID 5042）的 tBTC/tUSDC、tQQQ/tUSDC、tCRCL/tUSDC，以及 BSC（Chain ID 56）的 WBNB/USDT、BNB/USDT、QQQB/USDT、tBNB/tUSDT、tQQQ/tUSDT、tbSPY/tUSDT、tbCRCL/tUSDT。池选择器同步切换 RPC、Hook、PoolKey、钱包目标网络与提交时的链校验。自动读取链上参数；测试人员可调整双向临时费率、TTL，以及 RWA 指定日期日历状态。1 bp = 100 pips，输入旁实时显示换算。
+
+BSC 的 Crypto 池使用 Ramp；原生 BNB 池使用 RampETH；QQQB、tQQQ、tbSPY、tbCRCL 使用 RwaRamp，可调整 RWA 曲线与日历。所有 BSC PoolKey 的 fee 为 `0x800000`，tickSpacing 为 `1`，其中 tbSPY/tUSDT、tbCRCL/tUSDT 使用 `10`。WBNB/USDT 的实际 currency0 是 USDT，费率方向按 PoolKey 顺序显示。
 
 ## 部署给同事：GitHub Pages
 
@@ -60,6 +62,6 @@ RWA 日历区域支持读取并修改 `dstMode`：`0=AUTO`、`1=FIXED_EST`（UTC
 
 输入校验仅辅助操作，权限、边界和 50% 保护以合约为准；接口读值作参考，验收以 Swap 事件的 fee 为准。本轮不启用自动调费策略。
 
-RPC 与池白名单在 `app.js`，钱包链配置在 `wallet.jsx`，更换 RPC 时两处保持一致。浏览器可见配置不要包含秘密密钥。
+RPC 与链元数据统一在 `networks.js`，由页面与钱包共用；池白名单及 BSC 部署清单在 `app.js`，钱包适配器在 `wallet.jsx`。浏览器可见配置不要包含秘密密钥。
 
 依赖由 `package-lock.json` 锁定；当前第三方间接依赖仍有 moderate 审计告警，未视为生产安全审计通过。
